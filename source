@@ -1,0 +1,987 @@
+
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local Lighting         = game:GetService("Lighting")
+local player           = Players.LocalPlayer
+
+-- ================================================
+-- CONFIG
+-- ================================================
+local BOOST_FORCE    = 800
+local STOP_FORCE     = 0.05
+
+-- ================================================
+-- STATE
+-- ================================================
+local carRoot        = nil
+local isBoosting     = false
+local forceDay       = false
+local minimized      = false
+local dragging       = false
+local dragStartPos   = nil
+local windowStartPos = nil
+local activeTab      = "Vehicle"
+local vehicleFlyOn   = false
+local playerFlyOn    = false
+local vehicleFlyPart = nil
+local playerFlyPart  = nil
+local vehicleFlySpeed = 1.5
+local playerFlySpeed  = 1.5
+local antiPickup      = false
+
+-- ================================================
+-- THEMES
+-- ================================================
+local themes = {
+    {
+        name    = "Dark Red",
+        bg      = Color3.fromRGB(10, 10, 13),
+        title   = Color3.fromRGB(16, 16, 20),
+        accent  = Color3.fromRGB(220, 50, 50),
+        btn     = Color3.fromRGB(200, 45, 45),
+        btnText = Color3.fromRGB(255, 255, 255),
+        sub     = Color3.fromRGB(22, 22, 28),
+        text    = Color3.fromRGB(220, 220, 220),
+        dim     = Color3.fromRGB(100, 100, 115),
+        div     = Color3.fromRGB(30, 30, 36),
+        active  = Color3.fromRGB(220, 50, 50),
+    },
+    {
+        name    = "Midnight Blue",
+        bg      = Color3.fromRGB(8, 10, 18),
+        title   = Color3.fromRGB(12, 14, 26),
+        accent  = Color3.fromRGB(60, 100, 220),
+        btn     = Color3.fromRGB(50, 90, 200),
+        btnText = Color3.fromRGB(255, 255, 255),
+        sub     = Color3.fromRGB(16, 20, 36),
+        text    = Color3.fromRGB(200, 210, 240),
+        dim     = Color3.fromRGB(80, 90, 120),
+        div     = Color3.fromRGB(22, 26, 45),
+        active  = Color3.fromRGB(60, 100, 220),
+    },
+    {
+        name    = "Forest",
+        bg      = Color3.fromRGB(8, 14, 10),
+        title   = Color3.fromRGB(12, 20, 14),
+        accent  = Color3.fromRGB(50, 180, 80),
+        btn     = Color3.fromRGB(40, 160, 70),
+        btnText = Color3.fromRGB(255, 255, 255),
+        sub     = Color3.fromRGB(14, 24, 16),
+        text    = Color3.fromRGB(200, 230, 200),
+        dim     = Color3.fromRGB(80, 110, 85),
+        div     = Color3.fromRGB(22, 36, 24),
+        active  = Color3.fromRGB(50, 180, 80),
+    },
+    {
+        name    = "Ghost",
+        bg      = Color3.fromRGB(230, 230, 235),
+        title   = Color3.fromRGB(210, 210, 218),
+        accent  = Color3.fromRGB(80, 80, 90),
+        btn     = Color3.fromRGB(80, 80, 95),
+        btnText = Color3.fromRGB(255, 255, 255),
+        sub     = Color3.fromRGB(215, 215, 222),
+        text    = Color3.fromRGB(30, 30, 40),
+        dim     = Color3.fromRGB(120, 120, 135),
+        div     = Color3.fromRGB(190, 190, 200),
+        active  = Color3.fromRGB(80, 80, 95),
+    },
+}
+local currentTheme = 1
+
+-- ================================================
+-- HELPERS
+-- ================================================
+local WINDOW_W = 240
+local WINDOW_H = 340
+
+local function makeCorner(parent, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 8)
+    c.Parent = parent
+end
+
+local function makeDivider(parent, y, theme)
+    local d = Instance.new("Frame")
+    d.Size = UDim2.new(1, -28, 0, 1)
+    d.Position = UDim2.new(0, 14, 0, y)
+    d.BackgroundColor3 = themes[currentTheme].div
+    d.BorderSizePixel = 0
+    d.Name = "Divider"
+    d.Parent = parent
+    return d
+end
+
+local function makeBtn(parent, text, y, h, bg, tc)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -28, 0, h or 38)
+    b.Position = UDim2.new(0, 14, 0, y)
+    b.BackgroundColor3 = bg or themes[currentTheme].sub
+    b.TextColor3 = tc or themes[currentTheme].text
+    b.Text = text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 11
+    b.BorderSizePixel = 0
+    b.AutoButtonColor = false
+    makeCorner(b, 7)
+    b.Parent = parent
+    return b
+end
+
+local function makeLabel(parent, text, size, x, y, w, h, color, font, xalign)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(0, w, 0, h)
+    l.Position = UDim2.new(0, x, 0, y)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = color or themes[currentTheme].text
+    l.Font = font or Enum.Font.GothamBold
+    l.TextSize = size
+    l.TextXAlignment = xalign or Enum.TextXAlignment.Left
+    l.Parent = parent
+    return l
+end
+
+-- ================================================
+-- SCREEN GUI
+-- ================================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "notifications" --name of gui to bypass anti-cheat
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 999
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = player.PlayerGui
+
+local window = Instance.new("Frame")
+window.Name = "Window"
+window.Size = UDim2.new(0, WINDOW_W, 0, WINDOW_H)
+window.Position = UDim2.new(0, 40, 0, 80)
+window.BackgroundColor3 = themes[1].bg
+window.BorderSizePixel = 0
+window.ClipsDescendants = true
+window.Parent = screenGui
+makeCorner(window, 10)
+
+local winStroke = Instance.new("UIStroke")
+winStroke.Color = Color3.fromRGB(45, 45, 55)
+winStroke.Thickness = 1
+winStroke.Parent = window
+
+-- ================================================
+-- TITLE BAR
+-- ================================================
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 38)
+titleBar.BackgroundColor3 = themes[1].title
+titleBar.BorderSizePixel = 0
+titleBar.ZIndex = 5
+titleBar.Parent = window
+
+local accentLine = Instance.new("Frame")
+accentLine.Size = UDim2.new(1, 0, 0, 2)
+accentLine.Position = UDim2.new(0, 0, 1, -2)
+accentLine.BackgroundColor3 = themes[1].accent
+accentLine.BorderSizePixel = 0
+accentLine.ZIndex = 6
+accentLine.Parent = titleBar
+
+local titleTxt = Instance.new("TextLabel")
+titleTxt.Size = UDim2.new(1, -50, 1, 0)
+titleTxt.Position = UDim2.new(0, 14, 0, 0)
+titleTxt.BackgroundTransparency = 1
+titleTxt.Text = "TWISTED ENHANCED"
+titleTxt.TextColor3 = themes[1].text
+titleTxt.Font = Enum.Font.GothamBold
+titleTxt.TextSize = 11
+titleTxt.TextXAlignment = Enum.TextXAlignment.Left
+titleTxt.ZIndex = 6
+titleTxt.Parent = titleBar
+
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, 24, 0, 18)
+minBtn.Position = UDim2.new(1, -34, 0.5, -9)
+minBtn.BackgroundColor3 = themes[1].sub
+minBtn.TextColor3 = themes[1].dim
+minBtn.Text = "-"
+minBtn.Font = Enum.Font.GothamBold
+minBtn.TextSize = 14
+minBtn.BorderSizePixel = 0
+minBtn.AutoButtonColor = false
+minBtn.ZIndex = 7
+makeCorner(minBtn, 4)
+minBtn.Parent = titleBar
+
+-- ================================================
+-- TAB BAR
+-- ================================================
+local tabBar = Instance.new("Frame")
+tabBar.Size = UDim2.new(1, 0, 0, 32)
+tabBar.Position = UDim2.new(0, 0, 0, 38)
+tabBar.BackgroundColor3 = themes[1].title
+tabBar.BorderSizePixel = 0
+tabBar.ZIndex = 5
+tabBar.Parent = window
+
+local tabNames = {"Vehicle", "Player", "Settings"}
+local tabBtns  = {}
+
+for i, name in ipairs(tabNames) do
+    local tb = Instance.new("TextButton")
+    tb.Size = UDim2.new(1/#tabNames, 0, 1, 0)
+    tb.Position = UDim2.new((i-1)/#tabNames, 0, 0, 0)
+    tb.BackgroundColor3 = themes[1].title
+    tb.TextColor3 = i == 1 and themes[1].text or themes[1].dim
+    tb.Text = name
+    tb.Font = Enum.Font.GothamBold
+    tb.TextSize = 10
+    tb.BorderSizePixel = 0
+    tb.AutoButtonColor = false
+    tb.ZIndex = 6
+    tb.Parent = tabBar
+    tabBtns[name] = tb
+
+    -- Active indicator
+    local indicator = Instance.new("Frame")
+    indicator.Name = "Indicator"
+    indicator.Size = UDim2.new(0.7, 0, 0, 2)
+    indicator.Position = UDim2.new(0.15, 0, 1, -2)
+    indicator.BackgroundColor3 = themes[1].accent
+    indicator.BorderSizePixel = 0
+    indicator.Visible = i == 1
+    indicator.ZIndex = 7
+    indicator.Parent = tb
+end
+
+-- ================================================
+-- CONTENT AREA
+-- ================================================
+local contentArea = Instance.new("Frame")
+contentArea.Name = "ContentArea"
+contentArea.Size = UDim2.new(1, 0, 1, -70)
+contentArea.Position = UDim2.new(0, 0, 0, 70)
+contentArea.BackgroundTransparency = 1
+contentArea.ClipsDescendants = true
+contentArea.Parent = window
+
+-- ================================================
+-- VEHICLE TAB
+-- ================================================
+local vehicleTab = Instance.new("Frame")
+vehicleTab.Size = UDim2.new(1, 0, 1, 0)
+vehicleTab.BackgroundTransparency = 1
+vehicleTab.Visible = true
+vehicleTab.Parent = contentArea
+
+-- Status
+local statusLabel = makeLabel(vehicleTab, "Searching...", 10, 14, 10, WINDOW_W - 28, 16,
+    themes[1].dim, Enum.Font.Gotham)
+
+-- Speed
+makeLabel(vehicleTab, "SPEED", 9, 14, 34, 80, 12, themes[1].dim, Enum.Font.GothamBold)
+local speedValue = makeLabel(vehicleTab, "0 mph", 26, 14, 46, WINDOW_W - 28, 30,
+    themes[1].text, Enum.Font.GothamBold)
+
+makeDivider(vehicleTab, 82)
+
+-- Boost
+local boostBtn = makeBtn(vehicleTab, "HOLD TO BOOST", 90, 38,
+    themes[1].btn, themes[1].btnText)
+
+-- Stop
+local stopBtn = makeBtn(vehicleTab, "EMERGENCY STOP", 136, 38, themes[1].sub, themes[1].text)
+local stopStroke = Instance.new("UIStroke")
+stopStroke.Color = themes[1].div
+stopStroke.Thickness = 1
+stopStroke.Parent = stopBtn
+
+makeDivider(vehicleTab, 182)
+
+-- Vehicle Fly
+local vFlyBtn = makeBtn(vehicleTab, "VEHICLE FLY: OFF", 190, 38, themes[1].sub, themes[1].text)
+local vFlyStroke = Instance.new("UIStroke")
+vFlyStroke.Color = themes[1].div
+vFlyStroke.Thickness = 1
+vFlyStroke.Parent = vFlyBtn
+
+-- Fly speed slider label
+local vSliderLabel = makeLabel(vehicleTab, "FLY SPEED", 9, 14, 236, 100, 12, themes[1].dim, Enum.Font.GothamBold)
+local vSliderVal = makeLabel(vehicleTab, "1.5", 9, WINDOW_W - 42, 236, 28, 12, themes[1].dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+
+local vSliderTrack = Instance.new("Frame")
+vSliderTrack.Size = UDim2.new(1, -28, 0, 6)
+vSliderTrack.Position = UDim2.new(0, 14, 0, 252)
+vSliderTrack.BackgroundColor3 = themes[1].sub
+vSliderTrack.BorderSizePixel = 0
+makeCorner(vSliderTrack, 3)
+vSliderTrack.Parent = vehicleTab
+
+local vSliderFill = Instance.new("Frame")
+vSliderFill.Size = UDim2.new(0.3, 0, 1, 0)
+vSliderFill.BackgroundColor3 = themes[1].accent
+vSliderFill.BorderSizePixel = 0
+makeCorner(vSliderFill, 3)
+vSliderFill.Parent = vSliderTrack
+
+local vSliderKnob = Instance.new("TextButton")
+vSliderKnob.Size = UDim2.new(0, 14, 0, 14)
+vSliderKnob.Position = UDim2.new(0.3, -7, 0.5, -7)
+vSliderKnob.BackgroundColor3 = themes[1].text
+vSliderKnob.Text = ""
+vSliderKnob.BorderSizePixel = 0
+vSliderKnob.AutoButtonColor = false
+makeCorner(vSliderKnob, 7)
+vSliderKnob.Parent = vSliderTrack
+
+-- ================================================
+-- PLAYER TAB
+-- ================================================
+local playerTab = Instance.new("Frame")
+playerTab.Size = UDim2.new(1, 0, 1, 0)
+playerTab.BackgroundTransparency = 1
+playerTab.Visible = false
+playerTab.Parent = contentArea
+
+-- Force Day
+local dayBtn = makeBtn(playerTab, "FORCE DAY: OFF", 10, 38, themes[1].sub, themes[1].text)
+local dayStroke = Instance.new("UIStroke")
+dayStroke.Color = themes[1].div
+dayStroke.Thickness = 1
+dayStroke.Parent = dayBtn
+
+makeDivider(playerTab, 56)
+
+-- Player Fly
+local pFlyBtn = makeBtn(playerTab, "PLAYER FLY: OFF", 64, 38, themes[1].sub, themes[1].text)
+local pFlyStroke = Instance.new("UIStroke")
+pFlyStroke.Color = themes[1].div
+pFlyStroke.Thickness = 1
+pFlyStroke.Parent = pFlyBtn
+
+-- Player fly speed slider
+local pSliderLabel = makeLabel(playerTab, "FLY SPEED", 9, 14, 110, 100, 12, themes[1].dim, Enum.Font.GothamBold)
+local pSliderVal = makeLabel(playerTab, "1.5", 9, WINDOW_W - 42, 110, 28, 12, themes[1].dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+
+local pSliderTrack = Instance.new("Frame")
+pSliderTrack.Size = UDim2.new(1, -28, 0, 6)
+pSliderTrack.Position = UDim2.new(0, 14, 0, 126)
+pSliderTrack.BackgroundColor3 = themes[1].sub
+pSliderTrack.BorderSizePixel = 0
+makeCorner(pSliderTrack, 3)
+pSliderTrack.Parent = playerTab
+
+local pSliderFill = Instance.new("Frame")
+pSliderFill.Size = UDim2.new(0.3, 0, 1, 0)
+pSliderFill.BackgroundColor3 = themes[1].accent
+pSliderFill.BorderSizePixel = 0
+makeCorner(pSliderFill, 3)
+pSliderFill.Parent = pSliderTrack
+
+local pSliderKnob = Instance.new("TextButton")
+pSliderKnob.Size = UDim2.new(0, 14, 0, 14)
+pSliderKnob.Position = UDim2.new(0.3, -7, 0.5, -7)
+pSliderKnob.BackgroundColor3 = themes[1].text
+pSliderKnob.Text = ""
+pSliderKnob.BorderSizePixel = 0
+pSliderKnob.AutoButtonColor = false
+makeCorner(pSliderKnob, 7)
+pSliderKnob.Parent = pSliderTrack
+
+local pFlyHint = makeLabel(playerTab, "WASD + Space/Ctrl to fly", 9, 14, 142, WINDOW_W - 28, 14,
+    themes[1].dim, Enum.Font.Gotham)
+
+makeDivider(playerTab, 162)
+
+-- Anti-Pickup
+local antiPickupBtn = makeBtn(playerTab, "ANTI-PICKUP: OFF", 170, 38, themes[1].sub, themes[1].text)
+local antiPickupStroke = Instance.new("UIStroke")
+antiPickupStroke.Color = themes[1].div
+antiPickupStroke.Thickness = 1
+antiPickupStroke.Parent = antiPickupBtn
+
+local antiPickupHint = makeLabel(playerTab, "Locks you + car to the ground", 9, 14, 214, WINDOW_W - 28, 14,
+    themes[1].dim, Enum.Font.Gotham)
+
+-- ================================================
+-- SETTINGS TAB
+-- ================================================
+local settingsTab = Instance.new("Frame")
+settingsTab.Size = UDim2.new(1, 0, 1, 0)
+settingsTab.BackgroundTransparency = 1
+settingsTab.Visible = false
+settingsTab.Parent = contentArea
+
+makeLabel(settingsTab, "THEME", 9, 14, 10, 80, 12, themes[1].dim, Enum.Font.GothamBold)
+
+local themeButtons = {}
+for i, t in ipairs(themes) do
+    local tb = Instance.new("TextButton")
+    tb.Size = UDim2.new(1, -28, 0, 34)
+    tb.Position = UDim2.new(0, 14, 0, 26 + (i-1) * 42)
+    tb.BackgroundColor3 = t.bg
+    tb.TextColor3 = t.text
+    tb.Text = t.name
+    tb.Font = Enum.Font.GothamBold
+    tb.TextSize = 11
+    tb.BorderSizePixel = 0
+    tb.AutoButtonColor = false
+    makeCorner(tb, 7)
+    tb.Parent = settingsTab
+
+    local tStroke = Instance.new("UIStroke")
+    tStroke.Color = i == 1 and themes[1].accent or t.div
+    tStroke.Thickness = i == 1 and 2 or 1
+    tStroke.Parent = tb
+
+    themeButtons[i] = {btn = tb, stroke = tStroke}
+end
+
+-- ================================================
+-- APPLY THEME
+-- ================================================
+local function applyTheme(idx)
+    currentTheme = idx
+    local t = themes[idx]
+
+    window.BackgroundColor3 = t.bg
+    winStroke.Color = t.div
+    titleBar.BackgroundColor3 = t.title
+    accentLine.BackgroundColor3 = t.accent
+    titleTxt.TextColor3 = t.text
+    minBtn.BackgroundColor3 = t.sub
+    minBtn.TextColor3 = t.dim
+    tabBar.BackgroundColor3 = t.title
+
+    for name, tb in pairs(tabBtns) do
+        tb.BackgroundColor3 = t.title
+        tb.TextColor3 = name == activeTab and t.text or t.dim
+        tb:FindFirstChild("Indicator").BackgroundColor3 = t.accent
+        tb:FindFirstChild("Indicator").Visible = name == activeTab
+    end
+
+    statusLabel.TextColor3 = t.dim
+    speedValue.TextColor3 = t.text
+    boostBtn.BackgroundColor3 = t.btn
+    boostBtn.TextColor3 = t.btnText
+    stopBtn.BackgroundColor3 = t.sub
+    stopBtn.TextColor3 = t.text
+    stopStroke.Color = t.div
+    vFlyBtn.BackgroundColor3 = t.sub
+    vFlyBtn.TextColor3 = t.text
+    vFlyStroke.Color = t.div
+    vSliderLabel.TextColor3 = t.dim
+    vSliderVal.TextColor3 = t.dim
+    vSliderTrack.BackgroundColor3 = t.sub
+    vSliderFill.BackgroundColor3 = t.accent
+    vSliderKnob.BackgroundColor3 = t.text
+    dayBtn.BackgroundColor3 = forceDay and t.accent or t.sub
+    dayBtn.TextColor3 = forceDay and t.btnText or t.text
+    dayStroke.Color = t.div
+    pFlyBtn.BackgroundColor3 = t.sub
+    pFlyBtn.TextColor3 = t.text
+    pFlyStroke.Color = t.div
+    pSliderLabel.TextColor3 = t.dim
+    pSliderVal.TextColor3 = t.dim
+    pSliderTrack.BackgroundColor3 = t.sub
+    pSliderFill.BackgroundColor3 = t.accent
+    pSliderKnob.BackgroundColor3 = t.text
+    pFlyHint.TextColor3 = t.dim
+    antiPickupBtn.BackgroundColor3 = antiPickup and t.accent or t.sub
+    antiPickupBtn.TextColor3 = antiPickup and t.btnText or t.text
+    antiPickupStroke.Color = t.div
+    antiPickupHint.TextColor3 = t.dim
+
+    for i2, data in ipairs(themeButtons) do
+        data.stroke.Color = i2 == idx and t.accent or themes[i2].div
+        data.stroke.Thickness = i2 == idx and 2 or 1
+    end
+end
+
+for i, data in ipairs(themeButtons) do
+    data.btn.MouseButton1Click:Connect(function()
+        applyTheme(i)
+    end)
+end
+
+-- ================================================
+-- TAB SWITCHING
+-- ================================================
+local tabs = {
+    Vehicle  = vehicleTab,
+    Player   = playerTab,
+    Settings = settingsTab,
+}
+
+local function switchTab(name)
+    activeTab = name
+    for n, frame in pairs(tabs) do
+        frame.Visible = n == name
+    end
+    for n, tb in pairs(tabBtns) do
+        tb.TextColor3 = n == name and themes[currentTheme].text or themes[currentTheme].dim
+        tb:FindFirstChild("Indicator").Visible = n == name
+    end
+end
+
+for name, tb in pairs(tabBtns) do
+    tb.MouseButton1Click:Connect(function() switchTab(name) end)
+end
+
+-- ================================================
+-- DRAGGING
+-- ================================================
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStartPos = input.Position
+        windowStartPos = window.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStartPos
+        window.Position = UDim2.new(
+            windowStartPos.X.Scale, windowStartPos.X.Offset + delta.X,
+            windowStartPos.Y.Scale, windowStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- ================================================
+-- MINIMIZE
+-- ================================================
+minBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    TweenService:Create(window, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {
+        Size = minimized and UDim2.new(0, WINDOW_W, 0, 38) or UDim2.new(0, WINDOW_W, 0, WINDOW_H)
+    }):Play()
+    minBtn.Text = minimized and "+" or "-"
+end)
+
+-- ================================================
+-- FIND CAR
+-- ================================================
+local function tryLoadCar(cars)
+    local carFolder = cars:FindFirstChild(tostring(player.UserId))
+    carRoot = nil
+    if not carFolder then
+        statusLabel.Text = "No car found"
+        return
+    end
+    for _, obj in ipairs(carFolder:GetChildren()) do
+        if obj:IsA("BasePart") then
+            carRoot = obj
+            statusLabel.Text = "Car detected"
+            statusLabel.TextColor3 = Color3.fromRGB(80, 200, 120)
+            return
+        end
+    end
+end
+
+task.spawn(function()
+    local pr = workspace:WaitForChild("player_related")
+    local cars = pr:WaitForChild("cars")
+    tryLoadCar(cars)
+    cars.ChildAdded:Connect(function() task.wait(0.5) tryLoadCar(cars) end)
+    cars.ChildRemoved:Connect(function() task.wait(0.1) tryLoadCar(cars) end)
+end)
+
+-- ================================================
+-- BOOST
+-- ================================================
+local function startBoost()
+    isBoosting = true
+    boostBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    boostBtn.Text = "BOOSTING"
+end
+local function stopBoost()
+    isBoosting = false
+    boostBtn.BackgroundColor3 = themes[currentTheme].btn
+    boostBtn.Text = "HOLD TO BOOST"
+end
+
+boostBtn.MouseButton1Down:Connect(startBoost)
+boostBtn.MouseButton1Up:Connect(stopBoost)
+boostBtn.MouseLeave:Connect(stopBoost)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if input.KeyCode == Enum.KeyCode.LeftShift and not processed then startBoost() end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.LeftShift then stopBoost() end
+end)
+
+-- ================================================
+-- EMERGENCY STOP
+-- ================================================
+stopBtn.MouseButton1Click:Connect(function()
+    if not carRoot then return end
+    carRoot.AssemblyLinearVelocity = carRoot.AssemblyLinearVelocity * STOP_FORCE
+    stopBoost()
+    stopBtn.Text = "STOPPED"
+    task.wait(0.8)
+    stopBtn.Text = "EMERGENCY STOP"
+end)
+
+-- ================================================
+-- VEHICLE FLY
+-- ================================================
+local function enableVehicleFly()
+    if not carRoot then return end
+    vehicleFlyOn = true
+
+    -- Create invisible fly platform under the car
+    vehicleFlyPart = Instance.new("Part")
+    vehicleFlyPart.Name = "VehicleFlyPart"
+    vehicleFlyPart.Size = Vector3.new(4, 1, 4)
+    vehicleFlyPart.Transparency = 1
+    vehicleFlyPart.CanCollide = false
+    vehicleFlyPart.Anchored = false
+    vehicleFlyPart.CFrame = carRoot.CFrame * CFrame.new(0, -2, 0)
+    vehicleFlyPart.Parent = workspace
+
+    -- Weld fly part to car
+    local weld = Instance.new("WeldConstraint")
+    weld.Name = "FlyWeld"
+    weld.Part0 = vehicleFlyPart
+    weld.Part1 = carRoot
+    weld.Parent = vehicleFlyPart
+
+    -- Remove gravity on car assembly
+    local bg = Instance.new("BodyGyro")
+    bg.Name = "FlyGyro"
+    bg.MaxTorque = Vector3.new(4e5, 4e5, 4e5)
+    bg.D = 100
+    bg.CFrame = carRoot.CFrame
+    bg.Parent = vehicleFlyPart
+
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "FlyVelocity"
+    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.Parent = vehicleFlyPart
+
+    vFlyBtn.Text = "VEHICLE FLY: ON"
+    vFlyBtn.BackgroundColor3 = themes[currentTheme].accent
+    vFlyBtn.TextColor3 = themes[currentTheme].btnText
+end
+
+local function disableVehicleFly()
+    vehicleFlyOn = false
+    if vehicleFlyPart then
+        vehicleFlyPart:Destroy()
+        vehicleFlyPart = nil
+    end
+    vFlyBtn.Text = "VEHICLE FLY: OFF"
+    vFlyBtn.BackgroundColor3 = themes[currentTheme].sub
+    vFlyBtn.TextColor3 = themes[currentTheme].text
+end
+
+vFlyBtn.MouseButton1Click:Connect(function()
+    if vehicleFlyOn then disableVehicleFly() else enableVehicleFly() end
+end)
+
+-- ================================================
+-- PLAYER FLY
+-- ================================================
+local function enablePlayerFly()
+    local character = player.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    playerFlyOn = true
+
+    playerFlyPart = Instance.new("Part")
+    playerFlyPart.Name = "PlayerFlyPart"
+    playerFlyPart.Size = Vector3.new(1, 1, 1)
+    playerFlyPart.Transparency = 1
+    playerFlyPart.CanCollide = false
+    playerFlyPart.Anchored = false
+    playerFlyPart.CFrame = hrp.CFrame
+    playerFlyPart.Parent = workspace
+
+    local weld = Instance.new("WeldConstraint")
+    weld.Name = "PlayerFlyWeld"
+    weld.Part0 = playerFlyPart
+    weld.Part1 = hrp
+    weld.Parent = playerFlyPart
+
+    local bg = Instance.new("BodyGyro")
+    bg.Name = "FlyGyro"
+    bg.MaxTorque = Vector3.new(4e5, 4e5, 4e5)
+    bg.D = 100
+    bg.CFrame = hrp.CFrame
+    bg.Parent = playerFlyPart
+
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "FlyVelocity"
+    bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.Parent = playerFlyPart
+
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.PlatformStand = true end
+
+    pFlyBtn.Text = "PLAYER FLY: ON"
+    pFlyBtn.BackgroundColor3 = themes[currentTheme].accent
+    pFlyBtn.TextColor3 = themes[currentTheme].btnText
+end
+
+local function disablePlayerFly()
+    playerFlyOn = false
+    if playerFlyPart then
+        playerFlyPart:Destroy()
+        playerFlyPart = nil
+    end
+    local character = player.Character
+    if character then
+        local hum = character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end
+    pFlyBtn.Text = "PLAYER FLY: OFF"
+    pFlyBtn.BackgroundColor3 = themes[currentTheme].sub
+    pFlyBtn.TextColor3 = themes[currentTheme].text
+end
+
+pFlyBtn.MouseButton1Click:Connect(function()
+    if playerFlyOn then disablePlayerFly() else enablePlayerFly() end
+end)
+
+-- Reset fly on character respawn
+player.CharacterAdded:Connect(function(char)
+    -- Wait for character to fully load
+    task.wait(1)
+
+    -- Re-enable player fly if it was on
+    if playerFlyOn then
+        playerFlyOn = false
+        if playerFlyPart then
+            playerFlyPart:Destroy()
+            playerFlyPart = nil
+        end
+        enablePlayerFly()
+    end
+
+    -- Re-enable vehicle fly if it was on (car may have respawned too)
+    if vehicleFlyOn then
+        vehicleFlyOn = false
+        if vehicleFlyPart then
+            vehicleFlyPart:Destroy()
+            vehicleFlyPart = nil
+        end
+        task.wait(0.5)
+        enableVehicleFly()
+    end
+
+    -- Reload car reference
+    local pr = workspace:FindFirstChild("player_related")
+    if pr then
+        local cars = pr:FindFirstChild("cars")
+        if cars then
+            tryLoadCar(cars)
+        end
+    end
+end)
+
+-- ================================================
+-- SLIDER LOGIC
+-- ================================================
+local function setupSlider(track, fill, knob, valLabel, minVal, maxVal, defaultVal, onChange)
+    local isDragging = false
+    local function update(absX)
+        local relX = math.clamp(absX - track.AbsolutePosition.X, 0, track.AbsoluteSize.X)
+        local pct = relX / track.AbsoluteSize.X
+        local val = math.floor((minVal + (maxVal - minVal) * pct) * 10 + 0.5) / 10
+        fill.Size = UDim2.new(pct, 0, 1, 0)
+        knob.Position = UDim2.new(pct, -7, 0.5, -7)
+        valLabel.Text = tostring(val)
+        onChange(val)
+    end
+
+    knob.MouseButton1Down:Connect(function() isDragging = true end)
+    UserInputService.InputChanged:Connect(function(input)
+        if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            update(input.Position.X)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = false
+        end
+    end)
+    track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            update(input.Position.X)
+        end
+    end)
+end
+
+setupSlider(vSliderTrack, vSliderFill, vSliderKnob, vSliderVal, 0.5, 5, 1.5, function(v)
+    vehicleFlySpeed = v
+end)
+
+setupSlider(pSliderTrack, pSliderFill, pSliderKnob, pSliderVal, 0.5, 5, 1.5, function(v)
+    playerFlySpeed = v
+end)
+
+-- ================================================
+-- FORCE DAY
+-- ================================================
+dayBtn.MouseButton1Click:Connect(function()
+    forceDay = not forceDay
+    if forceDay then
+        dayBtn.BackgroundColor3 = themes[currentTheme].accent
+        dayBtn.TextColor3 = themes[currentTheme].btnText
+        dayBtn.Text = "FORCE DAY: ON"
+    else
+        dayBtn.BackgroundColor3 = themes[currentTheme].sub
+        dayBtn.TextColor3 = themes[currentTheme].text
+        dayBtn.Text = "FORCE DAY: OFF"
+    end
+end)
+
+-- ================================================
+-- ANTI-PICKUP TOGGLE
+-- ================================================
+antiPickupBtn.MouseButton1Click:Connect(function()
+    antiPickup = not antiPickup
+    if antiPickup then
+        antiPickupBtn.BackgroundColor3 = themes[currentTheme].accent
+        antiPickupBtn.TextColor3 = themes[currentTheme].btnText
+        antiPickupBtn.Text = "ANTI-PICKUP: ON"
+    else
+        antiPickupBtn.BackgroundColor3 = themes[currentTheme].sub
+        antiPickupBtn.TextColor3 = themes[currentTheme].text
+        antiPickupBtn.Text = "ANTI-PICKUP: OFF"
+    end
+end)
+
+-- ================================================
+-- READ SPEED FROM SPEEDOMETER UI
+-- ================================================
+local function getUISpeed()
+    local pGui = player.PlayerGui
+    local vehicleUI = pGui:FindFirstChild("vehicle_ui")
+    if not vehicleUI then return nil end
+    local pc = vehicleUI:FindFirstChild("pc")
+    if not pc then return nil end
+    local drivetrain = pc:FindFirstChild("drivetrain")
+    if not drivetrain then return nil end
+    local speedometer = drivetrain:FindFirstChild("speedometer")
+    if not speedometer then return nil end
+    local speedObj = speedometer:FindFirstChild("speed")
+    if not speedObj then return nil end
+    -- It might be a TextLabel or IntValue etc
+    if speedObj:IsA("TextLabel") or speedObj:IsA("TextBox") then
+        return speedObj.Text
+    elseif speedObj:IsA("IntValue") or speedObj:IsA("NumberValue") then
+        return tostring(math.floor(speedObj.Value))
+    end
+    return nil
+end
+
+-- ================================================
+-- MAIN LOOP
+-- ================================================
+RunService.RenderStepped:Connect(function()
+    local t = themes[currentTheme]
+
+    -- Force day
+    if forceDay then
+        Lighting.ClockTime = 14
+        Lighting.Brightness = 2
+        Lighting.Ambient = Color3.fromRGB(120, 120, 120)
+        Lighting.OutdoorAmbient = Color3.fromRGB(140, 140, 140)
+    end
+
+    -- Speed display from UI
+    local uiSpeed = getUISpeed()
+    if uiSpeed then
+        speedValue.Text = uiSpeed .. " mph"
+    elseif carRoot then
+        local vel = carRoot.AssemblyLinearVelocity
+        local s = math.floor(Vector3.new(vel.X, 0, vel.Z).Magnitude * 0.44)
+        speedValue.Text = s .. " mph"
+    end
+
+    -- Color speed
+    local numSpeed = tonumber(speedValue.Text:match("%d+")) or 0
+    if numSpeed < 80 then
+        speedValue.TextColor3 = t.text
+    elseif numSpeed < 130 then
+        speedValue.TextColor3 = Color3.fromRGB(255, 200, 60)
+    else
+        speedValue.TextColor3 = Color3.fromRGB(255, 70, 70)
+    end
+
+    -- Anti-Pickup: zero out upward velocity on player and car every frame
+    if antiPickup then
+        local character = player.Character
+        if character then
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local v = hrp.AssemblyLinearVelocity
+                if v.Y > 2 then
+                    hrp.AssemblyLinearVelocity = Vector3.new(v.X, 0, v.Z)
+                end
+            end
+        end
+        if carRoot then
+            local cv = carRoot.AssemblyLinearVelocity
+            if cv.Y > 2 then
+                carRoot.AssemblyLinearVelocity = Vector3.new(cv.X, 0, cv.Z)
+            end
+        end
+    end
+    -- Car boost
+    if isBoosting and carRoot then
+        local forward = carRoot.CFrame.LookVector
+        local flat = Vector3.new(forward.X, 0, forward.Z).Unit
+        carRoot:ApplyImpulse(flat * BOOST_FORCE)
+    end
+
+    -- Vehicle fly controls
+    if vehicleFlyOn and vehicleFlyPart then
+        local bv = vehicleFlyPart:FindFirstChild("FlyVelocity")
+        local bg = vehicleFlyPart:FindFirstChild("FlyGyro")
+        if bv and bg then
+            local cam = workspace.CurrentCamera
+            local vel = Vector3.new()
+            local spd = vehicleFlySpeed * 80
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel = vel - Vector3.new(0,1,0) end
+            bv.Velocity = vel.Magnitude > 0 and vel.Unit * spd or Vector3.new()
+            bg.CFrame = cam.CFrame
+        end
+    end
+
+    -- Player fly controls
+    if playerFlyOn and playerFlyPart then
+        local bv = playerFlyPart:FindFirstChild("FlyVelocity")
+        local bg = playerFlyPart:FindFirstChild("FlyGyro")
+        if bv and bg then
+            local cam = workspace.CurrentCamera
+            local vel = Vector3.new()
+            local spd = playerFlySpeed * 80
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel = vel - Vector3.new(0,1,0) end
+            bv.Velocity = vel.Magnitude > 0 and vel.Unit * spd or Vector3.new()
+            bg.CFrame = cam.CFrame
+        end
+    end
+end)
