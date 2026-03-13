@@ -1,3 +1,15 @@
+--        _ _   _           _                       
+--       (_) | | |         | |                      
+--   __ _ _| |_| |__  _   _| |__                    
+--  / _` | | __| '_ \| | | | '_ \                   
+-- | (_| | | |_| | | | |_| | |_) |                  
+--  \__, |_|\__|_| |_|\__,_|_.__/ _          __  __ 
+--   __/ |   | |           (_)   | |        / _|/ _|
+--  |___/ ___| |_ _ __ ___  _ ___| |_ _   _| |_| |_ 
+--  / _` / __| __| '__/ _ \| / __| __| | | |  _|  _|
+-- | (_| \__ \ |_| | | (_) | \__ \ |_| |_| | | | |  
+--  \__,_|___/\__|_|  \___/|_|___/\__|\__,_|_| |_|  
+-- github.com/astroistuff/TwistedEnhanced                                                 
 
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
@@ -147,7 +159,7 @@ end
 -- SCREEN GUI
 -- ================================================
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "notifications" --name of gui to bypass anti-cheat
+screenGui.Name = "notifications"
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 999
 screenGui.IgnoreGuiInset = true
@@ -223,7 +235,7 @@ tabBar.BorderSizePixel = 0
 tabBar.ZIndex = 5
 tabBar.Parent = window
 
-local tabNames = {"Vehicle", "Player", "Settings"}
+local tabNames = {"Vehicle", "Player", "Settings", "Extras"}
 local tabBtns  = {}
 
 for i, name in ipairs(tabNames) do
@@ -436,6 +448,30 @@ for i, t in ipairs(themes) do
     themeButtons[i] = {btn = tb, stroke = tStroke}
 end
 
+
+-- ================================================
+-- EXTRAS TAB
+-- ================================================
+local extrasTab = Instance.new("Frame")
+extrasTab.Size = UDim2.new(1, 0, 1, 0)
+extrasTab.BackgroundTransparency = 1
+extrasTab.Visible = false
+extrasTab.Parent = contentArea
+
+makeLabel(extrasTab, "EXTERNAL TOOLS", 9, 14, 10, WINDOW_W - 28, 12, themes[1].dim, Enum.Font.GothamBold)
+
+local iyBtn = makeBtn(extrasTab, "LOAD INFINITE YIELD", 26, 38, themes[1].sub, themes[1].text)
+local iyStroke = Instance.new("UIStroke")
+iyStroke.Color = themes[1].div
+iyStroke.Thickness = 1
+iyStroke.Parent = iyBtn
+
+local iyHint = makeLabel(extrasTab, "Loads IY admin into your game", 9, 14, 70, WINDOW_W - 28, 14,
+    themes[1].dim, Enum.Font.Gotham)
+
+local iyStatus = makeLabel(extrasTab, "", 10, 14, 88, WINDOW_W - 28, 14,
+    Color3.fromRGB(80, 200, 120), Enum.Font.GothamBold)
+
 -- ================================================
 -- APPLY THEME
 -- ================================================
@@ -510,6 +546,7 @@ local tabs = {
     Vehicle  = vehicleTab,
     Player   = playerTab,
     Settings = settingsTab,
+    Extras   = extrasTab,
 }
 
 local function switchTab(name)
@@ -886,6 +923,36 @@ local function getUISpeed()
     end
     return nil
 end
+
+-- ================================================
+-- INFINITE YIELD LOADER
+-- ================================================
+local iyLoaded = false
+iyBtn.MouseButton1Click:Connect(function()
+    if iyLoaded then
+        iyStatus.Text = "Already loaded!"
+        return
+    end
+    iyBtn.Text = "LOADING..."
+    iyBtn.BackgroundColor3 = Color3.fromRGB(180, 140, 20)
+    iyStatus.Text = ""
+    task.spawn(function()
+        local ok, err = pcall(function()
+            loadstring(game:HttpGet(('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'), true))()
+        end)
+        if ok then
+            iyLoaded = true
+            iyBtn.Text = "IY LOADED"
+            iyBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 80)
+            iyStatus.Text = "Infinite Yield is active!"
+        else
+            iyBtn.Text = "LOAD INFINITE YIELD"
+            iyBtn.BackgroundColor3 = themes[currentTheme].sub
+            iyStatus.Text = "Failed - check HttpService"
+            iyStatus.TextColor3 = Color3.fromRGB(220, 60, 60)
+        end
+    end)
+end)
 
 -- ================================================
 -- MAIN LOOP
