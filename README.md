@@ -11,3 +11,13 @@ I am constantly updating this cheat so if there are any bugs let me know.
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/astroistuff/TwistedEnhanced/master/source"))()
 ```
+# Features
+
+- Player and Vehicle Flight
+- Player and Vehicle Speed Boost
+- Vehicle Instant Stop
+- Menu Themes
+- Infinite Yield
+- ESP
+- Twisted Remote Spy
+- Remove VFX (LAGGY!)
