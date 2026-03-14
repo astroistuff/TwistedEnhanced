@@ -27,21 +27,27 @@ local STOP_FORCE     = 0.05
 -- ================================================
 -- STATE
 -- ================================================
-local carRoot        = nil
-local isBoosting     = false
-local forceDay       = false
-local minimized      = false
-local dragging       = false
-local dragStartPos   = nil
-local windowStartPos = nil
-local activeTab      = "Vehicle"
-local vehicleFlyOn   = false
-local playerFlyOn    = false
-local vehicleFlyPart = nil
-local playerFlyPart  = nil
+local carRoot         = nil
+local isBoosting      = false
+local forceDay        = false
+local minimized       = false
+local dragging        = false
+local dragStartPos    = nil
+local windowStartPos  = nil
+local activeTab       = "Vehicle"
+local vehicleFlyOn    = false
+local playerFlyOn     = false
+local vehicleFlyPart  = nil
+local playerFlyPart   = nil
 local vehicleFlySpeed = 1.5
 local playerFlySpeed  = 1.5
 local antiPickup      = false
+local espOn           = false
+local playerSpeedOn   = false
+local removeParticles = false
+local playerSpeedMult = 1.5
+local speedBoostPart  = nil
+local espHighlights   = {}
 
 -- ================================================
 -- THEMES
@@ -114,7 +120,7 @@ local function makeCorner(parent, r)
     c.Parent = parent
 end
 
-local function makeDivider(parent, y, theme)
+local function makeDivider(parent, y)
     local d = Instance.new("Frame")
     d.Size = UDim2.new(1, -28, 0, 1)
     d.Position = UDim2.new(0, 14, 0, y)
@@ -253,7 +259,6 @@ for i, name in ipairs(tabNames) do
     tb.Parent = tabBar
     tabBtns[name] = tb
 
-    -- Active indicator
     local indicator = Instance.new("Frame")
     indicator.Name = "Indicator"
     indicator.Size = UDim2.new(0.7, 0, 0, 2)
@@ -285,22 +290,17 @@ vehicleTab.BackgroundTransparency = 1
 vehicleTab.Visible = true
 vehicleTab.Parent = contentArea
 
--- Status
 local statusLabel = makeLabel(vehicleTab, "Searching...", 10, 14, 10, WINDOW_W - 28, 16,
     themes[1].dim, Enum.Font.Gotham)
 
--- Speed
 makeLabel(vehicleTab, "SPEED", 9, 14, 34, 80, 12, themes[1].dim, Enum.Font.GothamBold)
 local speedValue = makeLabel(vehicleTab, "0 mph", 26, 14, 46, WINDOW_W - 28, 30,
     themes[1].text, Enum.Font.GothamBold)
 
 makeDivider(vehicleTab, 82)
 
--- Boost
-local boostBtn = makeBtn(vehicleTab, "HOLD TO BOOST", 90, 38,
-    themes[1].btn, themes[1].btnText)
+local boostBtn = makeBtn(vehicleTab, "HOLD TO BOOST", 90, 38, themes[1].btn, themes[1].btnText)
 
--- Stop
 local stopBtn = makeBtn(vehicleTab, "EMERGENCY STOP", 136, 38, themes[1].sub, themes[1].text)
 local stopStroke = Instance.new("UIStroke")
 stopStroke.Color = themes[1].div
@@ -309,16 +309,14 @@ stopStroke.Parent = stopBtn
 
 makeDivider(vehicleTab, 182)
 
--- Vehicle Fly
 local vFlyBtn = makeBtn(vehicleTab, "VEHICLE FLY: OFF", 190, 38, themes[1].sub, themes[1].text)
 local vFlyStroke = Instance.new("UIStroke")
 vFlyStroke.Color = themes[1].div
 vFlyStroke.Thickness = 1
 vFlyStroke.Parent = vFlyBtn
 
--- Fly speed slider label
 local vSliderLabel = makeLabel(vehicleTab, "FLY SPEED", 9, 14, 236, 100, 12, themes[1].dim, Enum.Font.GothamBold)
-local vSliderVal = makeLabel(vehicleTab, "1.5", 9, WINDOW_W - 42, 236, 28, 12, themes[1].dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+local vSliderVal   = makeLabel(vehicleTab, "1.5", 9, WINDOW_W - 42, 236, 28, 12, themes[1].dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
 
 local vSliderTrack = Instance.new("Frame")
 vSliderTrack.Size = UDim2.new(1, -28, 0, 6)
@@ -348,13 +346,17 @@ vSliderKnob.Parent = vSliderTrack
 -- ================================================
 -- PLAYER TAB
 -- ================================================
-local playerTab = Instance.new("Frame")
+local playerTab = Instance.new("ScrollingFrame")
 playerTab.Size = UDim2.new(1, 0, 1, 0)
 playerTab.BackgroundTransparency = 1
 playerTab.Visible = false
+playerTab.CanvasSize = UDim2.new(0, 0, 0, 380)
+playerTab.ScrollBarThickness = 3
+playerTab.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 95)
+playerTab.BorderSizePixel = 0
+playerTab.ScrollingDirection = Enum.ScrollingDirection.Y
 playerTab.Parent = contentArea
 
--- Force Day
 local dayBtn = makeBtn(playerTab, "FORCE DAY: OFF", 10, 38, themes[1].sub, themes[1].text)
 local dayStroke = Instance.new("UIStroke")
 dayStroke.Color = themes[1].div
@@ -363,16 +365,14 @@ dayStroke.Parent = dayBtn
 
 makeDivider(playerTab, 56)
 
--- Player Fly
 local pFlyBtn = makeBtn(playerTab, "PLAYER FLY: OFF", 64, 38, themes[1].sub, themes[1].text)
 local pFlyStroke = Instance.new("UIStroke")
 pFlyStroke.Color = themes[1].div
 pFlyStroke.Thickness = 1
 pFlyStroke.Parent = pFlyBtn
 
--- Player fly speed slider
 local pSliderLabel = makeLabel(playerTab, "FLY SPEED", 9, 14, 110, 100, 12, themes[1].dim, Enum.Font.GothamBold)
-local pSliderVal = makeLabel(playerTab, "1.5", 9, WINDOW_W - 42, 110, 28, 12, themes[1].dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+local pSliderVal   = makeLabel(playerTab, "1.5", 9, WINDOW_W - 42, 110, 28, 12, themes[1].dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
 
 local pSliderTrack = Instance.new("Frame")
 pSliderTrack.Size = UDim2.new(1, -28, 0, 6)
@@ -404,7 +404,6 @@ local pFlyHint = makeLabel(playerTab, "WASD + Space/Ctrl to fly", 9, 14, 142, WI
 
 makeDivider(playerTab, 162)
 
--- Anti-Pickup
 local antiPickupBtn = makeBtn(playerTab, "ANTI-PICKUP: OFF", 170, 38, themes[1].sub, themes[1].text)
 local antiPickupStroke = Instance.new("UIStroke")
 antiPickupStroke.Color = themes[1].div
@@ -412,6 +411,46 @@ antiPickupStroke.Thickness = 1
 antiPickupStroke.Parent = antiPickupBtn
 
 local antiPickupHint = makeLabel(playerTab, "Locks you + car to the ground", 9, 14, 214, WINDOW_W - 28, 14,
+    themes[1].dim, Enum.Font.Gotham)
+
+makeDivider(playerTab, 234)
+
+-- Speed boost
+local pSpeedBtn = makeBtn(playerTab, "SPEED BOOST: OFF", 242, 38, themes[1].sub, themes[1].text)
+local pSpeedStroke = Instance.new("UIStroke")
+pSpeedStroke.Color = themes[1].div
+pSpeedStroke.Thickness = 1
+pSpeedStroke.Parent = pSpeedBtn
+
+local pSpeedSliderLabel = makeLabel(playerTab, "SPEED MULT", 9, 14, 288, 110, 12, themes[1].dim, Enum.Font.GothamBold)
+local pSpeedSliderVal   = makeLabel(playerTab, "1.5x", 9, WINDOW_W - 42, 288, 28, 12, themes[1].dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+
+local pSpeedTrack = Instance.new("Frame")
+pSpeedTrack.Size = UDim2.new(1, -28, 0, 6)
+pSpeedTrack.Position = UDim2.new(0, 14, 0, 304)
+pSpeedTrack.BackgroundColor3 = themes[1].sub
+pSpeedTrack.BorderSizePixel = 0
+makeCorner(pSpeedTrack, 3)
+pSpeedTrack.Parent = playerTab
+
+local pSpeedFill = Instance.new("Frame")
+pSpeedFill.Size = UDim2.new(0.05, 0, 1, 0)
+pSpeedFill.BackgroundColor3 = themes[1].accent
+pSpeedFill.BorderSizePixel = 0
+makeCorner(pSpeedFill, 3)
+pSpeedFill.Parent = pSpeedTrack
+
+local pSpeedKnob = Instance.new("TextButton")
+pSpeedKnob.Size = UDim2.new(0, 14, 0, 14)
+pSpeedKnob.Position = UDim2.new(0.05, -7, 0.5, -7)
+pSpeedKnob.BackgroundColor3 = themes[1].text
+pSpeedKnob.Text = ""
+pSpeedKnob.BorderSizePixel = 0
+pSpeedKnob.AutoButtonColor = false
+makeCorner(pSpeedKnob, 7)
+pSpeedKnob.Parent = pSpeedTrack
+
+local pSpeedHint = makeLabel(playerTab, "Uses a welded part, no WalkSpeed change", 9, 14, 318, WINDOW_W - 28, 14,
     themes[1].dim, Enum.Font.Gotham)
 
 -- ================================================
@@ -448,16 +487,21 @@ for i, t in ipairs(themes) do
     themeButtons[i] = {btn = tb, stroke = tStroke}
 end
 
-
 -- ================================================
 -- EXTRAS TAB
 -- ================================================
-local extrasTab = Instance.new("Frame")
+local extrasTab = Instance.new("ScrollingFrame")
 extrasTab.Size = UDim2.new(1, 0, 1, 0)
 extrasTab.BackgroundTransparency = 1
 extrasTab.Visible = false
+extrasTab.CanvasSize = UDim2.new(0, 0, 0, 340)
+extrasTab.ScrollBarThickness = 3
+extrasTab.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 95)
+extrasTab.BorderSizePixel = 0
+extrasTab.ScrollingDirection = Enum.ScrollingDirection.Y
 extrasTab.Parent = contentArea
 
+-- IY
 makeLabel(extrasTab, "EXTERNAL TOOLS", 9, 14, 10, WINDOW_W - 28, 12, themes[1].dim, Enum.Font.GothamBold)
 
 local iyBtn = makeBtn(extrasTab, "LOAD INFINITE YIELD", 26, 38, themes[1].sub, themes[1].text)
@@ -471,6 +515,33 @@ local iyHint = makeLabel(extrasTab, "Loads IY admin into your game", 9, 14, 70, 
 
 local iyStatus = makeLabel(extrasTab, "", 10, 14, 88, WINDOW_W - 28, 14,
     Color3.fromRGB(80, 200, 120), Enum.Font.GothamBold)
+
+makeDivider(extrasTab, 108)
+
+-- ESP
+makeLabel(extrasTab, "VISUALS", 9, 14, 116, WINDOW_W - 28, 12, themes[1].dim, Enum.Font.GothamBold)
+
+local espBtn = makeBtn(extrasTab, "ESP: OFF", 132, 38, themes[1].sub, themes[1].text)
+local espStroke = Instance.new("UIStroke")
+espStroke.Color = themes[1].div
+espStroke.Thickness = 1
+espStroke.Parent = espBtn
+
+local espHint = makeLabel(extrasTab, "Health, team color + distance", 9, 14, 176, WINDOW_W - 28, 14,
+    themes[1].dim, Enum.Font.Gotham)
+
+makeDivider(extrasTab, 196)
+
+makeLabel(extrasTab, "PERFORMANCE", 9, 14, 204, WINDOW_W - 28, 12, themes[1].dim, Enum.Font.GothamBold)
+
+local particleBtn = makeBtn(extrasTab, "REMOVE PARTICLES: OFF", 220, 38, themes[1].sub, themes[1].text)
+local particleStroke = Instance.new("UIStroke")
+particleStroke.Color = themes[1].div
+particleStroke.Thickness = 1
+particleStroke.Parent = particleBtn
+
+local particleHint = makeLabel(extrasTab, "Clears Workspace.Camera.ParticleEffects", 9, 14, 264, WINDOW_W - 28, 14,
+    themes[1].dim, Enum.Font.Gotham)
 
 -- ================================================
 -- APPLY THEME
@@ -526,6 +597,23 @@ local function applyTheme(idx)
     antiPickupBtn.TextColor3 = antiPickup and t.btnText or t.text
     antiPickupStroke.Color = t.div
     antiPickupHint.TextColor3 = t.dim
+    pSpeedBtn.BackgroundColor3 = playerSpeedOn and t.accent or t.sub
+    pSpeedBtn.TextColor3 = playerSpeedOn and t.btnText or t.text
+    pSpeedStroke.Color = t.div
+    pSpeedSliderLabel.TextColor3 = t.dim
+    pSpeedSliderVal.TextColor3 = t.dim
+    pSpeedTrack.BackgroundColor3 = t.sub
+    pSpeedFill.BackgroundColor3 = t.accent
+    pSpeedKnob.BackgroundColor3 = t.text
+    pSpeedHint.TextColor3 = t.dim
+    espBtn.BackgroundColor3 = espOn and t.accent or t.sub
+    espBtn.TextColor3 = espOn and t.btnText or t.text
+    espStroke.Color = t.div
+    espHint.TextColor3 = t.dim
+    particleBtn.BackgroundColor3 = removeParticles and t.accent or t.sub
+    particleBtn.TextColor3 = removeParticles and t.btnText or t.text
+    particleStroke.Color = t.div
+    particleHint.TextColor3 = t.dim
 
     for i2, data in ipairs(themeButtons) do
         data.stroke.Color = i2 == idx and t.accent or themes[i2].div
@@ -674,7 +762,6 @@ local function enableVehicleFly()
     if not carRoot then return end
     vehicleFlyOn = true
 
-    -- Create invisible fly platform under the car
     vehicleFlyPart = Instance.new("Part")
     vehicleFlyPart.Name = "VehicleFlyPart"
     vehicleFlyPart.Size = Vector3.new(4, 1, 4)
@@ -684,14 +771,12 @@ local function enableVehicleFly()
     vehicleFlyPart.CFrame = carRoot.CFrame * CFrame.new(0, -2, 0)
     vehicleFlyPart.Parent = workspace
 
-    -- Weld fly part to car
     local weld = Instance.new("WeldConstraint")
     weld.Name = "FlyWeld"
     weld.Part0 = vehicleFlyPart
     weld.Part1 = carRoot
     weld.Parent = vehicleFlyPart
 
-    -- Remove gravity on car assembly
     local bg = Instance.new("BodyGyro")
     bg.Name = "FlyGyro"
     bg.MaxTorque = Vector3.new(4e5, 4e5, 4e5)
@@ -712,10 +797,7 @@ end
 
 local function disableVehicleFly()
     vehicleFlyOn = false
-    if vehicleFlyPart then
-        vehicleFlyPart:Destroy()
-        vehicleFlyPart = nil
-    end
+    if vehicleFlyPart then vehicleFlyPart:Destroy() vehicleFlyPart = nil end
     vFlyBtn.Text = "VEHICLE FLY: OFF"
     vFlyBtn.BackgroundColor3 = themes[currentTheme].sub
     vFlyBtn.TextColor3 = themes[currentTheme].text
@@ -773,10 +855,7 @@ end
 
 local function disablePlayerFly()
     playerFlyOn = false
-    if playerFlyPart then
-        playerFlyPart:Destroy()
-        playerFlyPart = nil
-    end
+    if playerFlyPart then playerFlyPart:Destroy() playerFlyPart = nil end
     local character = player.Character
     if character then
         local hum = character:FindFirstChildOfClass("Humanoid")
@@ -791,39 +870,30 @@ pFlyBtn.MouseButton1Click:Connect(function()
     if playerFlyOn then disablePlayerFly() else enablePlayerFly() end
 end)
 
--- Reset fly on character respawn
-player.CharacterAdded:Connect(function(char)
-    -- Wait for character to fully load
+player.CharacterAdded:Connect(function()
     task.wait(1)
-
-    -- Re-enable player fly if it was on
     if playerFlyOn then
         playerFlyOn = false
-        if playerFlyPart then
-            playerFlyPart:Destroy()
-            playerFlyPart = nil
-        end
+        if playerFlyPart then playerFlyPart:Destroy() playerFlyPart = nil end
         enablePlayerFly()
     end
-
-    -- Re-enable vehicle fly if it was on (car may have respawned too)
     if vehicleFlyOn then
         vehicleFlyOn = false
-        if vehicleFlyPart then
-            vehicleFlyPart:Destroy()
-            vehicleFlyPart = nil
-        end
+        if vehicleFlyPart then vehicleFlyPart:Destroy() vehicleFlyPart = nil end
         task.wait(0.5)
         enableVehicleFly()
     end
+    if playerSpeedOn then
+        playerSpeedOn = false
+        if speedBoostPart then speedBoostPart:Destroy() speedBoostPart = nil end
+        task.wait(0.2)
+        enablePlayerSpeed()
+    end
 
-    -- Reload car reference
     local pr = workspace:FindFirstChild("player_related")
     if pr then
         local cars = pr:FindFirstChild("cars")
-        if cars then
-            tryLoadCar(cars)
-        end
+        if cars then tryLoadCar(cars) end
     end
 end)
 
@@ -841,7 +911,6 @@ local function setupSlider(track, fill, knob, valLabel, minVal, maxVal, defaultV
         valLabel.Text = tostring(val)
         onChange(val)
     end
-
     knob.MouseButton1Down:Connect(function() isDragging = true end)
     UserInputService.InputChanged:Connect(function(input)
         if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -849,14 +918,10 @@ local function setupSlider(track, fill, knob, valLabel, minVal, maxVal, defaultV
         end
     end)
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isDragging = false
-        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end
     end)
     track.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            update(input.Position.X)
-        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then update(input.Position.X) end
     end)
 end
 
@@ -866,6 +931,62 @@ end)
 
 setupSlider(pSliderTrack, pSliderFill, pSliderKnob, pSliderVal, 0.5, 5, 1.5, function(v)
     playerFlySpeed = v
+end)
+
+setupSlider(pSpeedTrack, pSpeedFill, pSpeedKnob, pSpeedSliderVal, 1, 50, 1.5, function(v)
+    playerSpeedMult = v
+    pSpeedSliderVal.Text = v .. "x"
+end)
+
+-- ================================================
+-- PLAYER SPEED BOOST
+-- ================================================
+local function enablePlayerSpeed()
+    local character = player.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    playerSpeedOn = true
+
+    speedBoostPart = Instance.new("Part")
+    speedBoostPart.Name = "SpeedBoostPart"
+    speedBoostPart.Size = Vector3.new(2, 0.2, 2)
+    speedBoostPart.Transparency = 1
+    speedBoostPart.CanCollide = false
+    speedBoostPart.Anchored = false
+    speedBoostPart.CFrame = hrp.CFrame * CFrame.new(0, -3, 0)
+    speedBoostPart.Parent = workspace
+
+    local weld = Instance.new("WeldConstraint")
+    weld.Name = "SpeedWeld"
+    weld.Part0 = speedBoostPart
+    weld.Part1 = hrp
+    weld.Parent = speedBoostPart
+
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "SpeedVelocity"
+    bv.MaxForce = Vector3.new(1e9, 0, 1e9)
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.Parent = speedBoostPart
+
+    pSpeedBtn.Text = "SPEED BOOST: ON"
+    pSpeedBtn.BackgroundColor3 = themes[currentTheme].accent
+    pSpeedBtn.TextColor3 = themes[currentTheme].btnText
+end
+
+local function disablePlayerSpeed()
+    playerSpeedOn = false
+    if speedBoostPart then
+        speedBoostPart:Destroy()
+        speedBoostPart = nil
+    end
+    pSpeedBtn.Text = "SPEED BOOST: OFF"
+    pSpeedBtn.BackgroundColor3 = themes[currentTheme].sub
+    pSpeedBtn.TextColor3 = themes[currentTheme].text
+end
+
+pSpeedBtn.MouseButton1Click:Connect(function()
+    if playerSpeedOn then disablePlayerSpeed() else enablePlayerSpeed() end
 end)
 
 -- ================================================
@@ -885,7 +1006,7 @@ dayBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ================================================
--- ANTI-PICKUP TOGGLE
+-- ANTI-PICKUP
 -- ================================================
 antiPickupBtn.MouseButton1Click:Connect(function()
     antiPickup = not antiPickup
@@ -898,6 +1019,166 @@ antiPickupBtn.MouseButton1Click:Connect(function()
         antiPickupBtn.TextColor3 = themes[currentTheme].text
         antiPickupBtn.Text = "ANTI-PICKUP: OFF"
     end
+end)
+
+-- ================================================
+-- INFINITE YIELD
+-- ================================================
+local iyLoaded = false
+iyBtn.MouseButton1Click:Connect(function()
+    if iyLoaded then iyStatus.Text = "Already loaded!" return end
+    iyBtn.Text = "LOADING..."
+    iyBtn.BackgroundColor3 = Color3.fromRGB(180, 140, 20)
+    task.spawn(function()
+        local ok = pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source", true))()
+        end)
+        if ok then
+            iyLoaded = true
+            iyBtn.Text = "IY LOADED"
+            iyBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 80)
+            iyStatus.Text = "Infinite Yield is active!"
+        else
+            iyBtn.Text = "LOAD INFINITE YIELD"
+            iyBtn.BackgroundColor3 = themes[currentTheme].sub
+            iyStatus.Text = "Failed - check HttpService"
+            iyStatus.TextColor3 = Color3.fromRGB(220, 60, 60)
+        end
+    end)
+end)
+
+-- ================================================
+-- ESP SYSTEM
+-- ================================================
+local function getTeamColor(p)
+    if p.Team then return p.Team.TeamColor.Color end
+    return Color3.fromRGB(255, 255, 255)
+end
+
+local function removeESP(p)
+    if espHighlights[p] then
+        espHighlights[p]:Destroy()
+        espHighlights[p] = nil
+    end
+    if p.Character then
+        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local bb = hrp:FindFirstChild("TwistedESP_BB")
+            if bb then bb:Destroy() end
+        end
+        local hl = p.Character:FindFirstChild("TwistedESP_HL")
+        if hl then hl:Destroy() end
+    end
+end
+
+local function applyESP(p)
+    if p == player then return end
+    local char = p.Character
+    if not char then return end
+
+    -- Remove old
+    removeESP(p)
+
+    -- Highlight
+    local hl = Instance.new("Highlight")
+    hl.Name = "TwistedESP_HL"
+    hl.Adornee = char
+    hl.FillColor = getTeamColor(p)
+    hl.OutlineColor = getTeamColor(p)
+    hl.FillTransparency = 0.5
+    hl.OutlineTransparency = 0
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent = char
+    espHighlights[p] = hl
+
+    -- Billboard
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "TwistedESP_BB"
+    bb.Size = UDim2.new(0, 120, 0, 56)
+    bb.StudsOffset = Vector3.new(0, 3.5, 0)
+    bb.AlwaysOnTop = true
+    bb.Parent = hrp
+
+    -- Name
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size = UDim2.new(1, 0, 0, 16)
+    nameLbl.Position = UDim2.new(0, 0, 0, 0)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text = p.Name
+    nameLbl.TextColor3 = getTeamColor(p)
+    nameLbl.Font = Enum.Font.GothamBold
+    nameLbl.TextSize = 13
+    nameLbl.TextStrokeTransparency = 0.4
+    nameLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLbl.Name = "NameLbl"
+    nameLbl.Parent = bb
+
+    -- Health
+    local hpLbl = Instance.new("TextLabel")
+    hpLbl.Size = UDim2.new(1, 0, 0, 14)
+    hpLbl.Position = UDim2.new(0, 0, 0, 18)
+    hpLbl.BackgroundTransparency = 1
+    hpLbl.Text = "HP: 100/100"
+    hpLbl.TextColor3 = Color3.fromRGB(100, 220, 100)
+    hpLbl.Font = Enum.Font.Gotham
+    hpLbl.TextSize = 11
+    hpLbl.TextStrokeTransparency = 0.4
+    hpLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    hpLbl.Name = "HpLbl"
+    hpLbl.Parent = bb
+
+    -- Distance
+    local distLbl = Instance.new("TextLabel")
+    distLbl.Size = UDim2.new(1, 0, 0, 14)
+    distLbl.Position = UDim2.new(0, 0, 0, 34)
+    distLbl.BackgroundTransparency = 1
+    distLbl.Text = "0 studs"
+    distLbl.TextColor3 = Color3.fromRGB(180, 180, 180)
+    distLbl.Font = Enum.Font.Gotham
+    distLbl.TextSize = 11
+    distLbl.TextStrokeTransparency = 0.4
+    distLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    distLbl.Name = "DistLbl"
+    distLbl.Parent = bb
+end
+
+local function enableESP()
+    espOn = true
+    espBtn.Text = "ESP: ON"
+    espBtn.BackgroundColor3 = themes[currentTheme].accent
+    espBtn.TextColor3 = themes[currentTheme].btnText
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        applyESP(p)
+        p.CharacterAdded:Connect(function()
+            if espOn then task.wait(0.5) applyESP(p) end
+        end)
+    end
+
+    Players.PlayerAdded:Connect(function(p)
+        if espOn then
+            applyESP(p)
+            p.CharacterAdded:Connect(function()
+                if espOn then task.wait(0.5) applyESP(p) end
+            end)
+        end
+    end)
+end
+
+local function disableESP()
+    espOn = false
+    espBtn.Text = "ESP: OFF"
+    espBtn.BackgroundColor3 = themes[currentTheme].sub
+    espBtn.TextColor3 = themes[currentTheme].text
+    for _, p in ipairs(Players:GetPlayers()) do removeESP(p) end
+    espHighlights = {}
+end
+
+espBtn.MouseButton1Click:Connect(function()
+    if espOn then disableESP() else enableESP() end
 end)
 
 -- ================================================
@@ -915,7 +1196,6 @@ local function getUISpeed()
     if not speedometer then return nil end
     local speedObj = speedometer:FindFirstChild("speed")
     if not speedObj then return nil end
-    -- It might be a TextLabel or IntValue etc
     if speedObj:IsA("TextLabel") or speedObj:IsA("TextBox") then
         return speedObj.Text
     elseif speedObj:IsA("IntValue") or speedObj:IsA("NumberValue") then
@@ -925,33 +1205,36 @@ local function getUISpeed()
 end
 
 -- ================================================
--- INFINITE YIELD LOADER
+-- REMOVE PARTICLES
 -- ================================================
-local iyLoaded = false
-iyBtn.MouseButton1Click:Connect(function()
-    if iyLoaded then
-        iyStatus.Text = "Already loaded!"
-        return
+particleBtn.MouseButton1Click:Connect(function()
+    removeParticles = not removeParticles
+    if removeParticles then
+        particleBtn.Text = "REMOVE PARTICLES: ON"
+        particleBtn.BackgroundColor3 = themes[currentTheme].accent
+        particleBtn.TextColor3 = themes[currentTheme].btnText
+    else
+        particleBtn.Text = "REMOVE PARTICLES: OFF"
+        particleBtn.BackgroundColor3 = themes[currentTheme].sub
+        particleBtn.TextColor3 = themes[currentTheme].text
     end
-    iyBtn.Text = "LOADING..."
-    iyBtn.BackgroundColor3 = Color3.fromRGB(180, 140, 20)
-    iyStatus.Text = ""
-    task.spawn(function()
-        local ok, err = pcall(function()
-            loadstring(game:HttpGet(('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'), true))()
-        end)
-        if ok then
-            iyLoaded = true
-            iyBtn.Text = "IY LOADED"
-            iyBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 80)
-            iyStatus.Text = "Infinite Yield is active!"
-        else
-            iyBtn.Text = "LOAD INFINITE YIELD"
-            iyBtn.BackgroundColor3 = themes[currentTheme].sub
-            iyStatus.Text = "Failed - check HttpService"
-            iyStatus.TextColor3 = Color3.fromRGB(220, 60, 60)
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if removeParticles then
+            local cam = workspace:FindFirstChild("Camera")
+            if cam then
+                local fx = cam:FindFirstChild("ParticleEffects")
+                if fx then
+                    for _, child in ipairs(fx:GetChildren()) do
+                        child:Destroy()
+                    end
+                end
+            end
         end
-    end)
+    end
 end)
 
 -- ================================================
@@ -968,7 +1251,7 @@ RunService.RenderStepped:Connect(function()
         Lighting.OutdoorAmbient = Color3.fromRGB(140, 140, 140)
     end
 
-    -- Speed display from UI
+    -- Speed
     local uiSpeed = getUISpeed()
     if uiSpeed then
         speedValue.Text = uiSpeed .. " mph"
@@ -978,7 +1261,6 @@ RunService.RenderStepped:Connect(function()
         speedValue.Text = s .. " mph"
     end
 
-    -- Color speed
     local numSpeed = tonumber(speedValue.Text:match("%d+")) or 0
     if numSpeed < 80 then
         speedValue.TextColor3 = t.text
@@ -988,33 +1270,30 @@ RunService.RenderStepped:Connect(function()
         speedValue.TextColor3 = Color3.fromRGB(255, 70, 70)
     end
 
-    -- Anti-Pickup: zero out upward velocity on player and car every frame
+    -- Anti-pickup
     if antiPickup then
         local character = player.Character
         if character then
             local hrp = character:FindFirstChild("HumanoidRootPart")
             if hrp then
                 local v = hrp.AssemblyLinearVelocity
-                if v.Y > 2 then
-                    hrp.AssemblyLinearVelocity = Vector3.new(v.X, 0, v.Z)
-                end
+                if v.Y > 2 then hrp.AssemblyLinearVelocity = Vector3.new(v.X, 0, v.Z) end
             end
         end
         if carRoot then
             local cv = carRoot.AssemblyLinearVelocity
-            if cv.Y > 2 then
-                carRoot.AssemblyLinearVelocity = Vector3.new(cv.X, 0, cv.Z)
-            end
+            if cv.Y > 2 then carRoot.AssemblyLinearVelocity = Vector3.new(cv.X, 0, cv.Z) end
         end
     end
-    -- Car boost
+
+    -- Boost
     if isBoosting and carRoot then
         local forward = carRoot.CFrame.LookVector
         local flat = Vector3.new(forward.X, 0, forward.Z).Unit
         carRoot:ApplyImpulse(flat * BOOST_FORCE)
     end
 
-    -- Vehicle fly controls
+    -- Vehicle fly
     if vehicleFlyOn and vehicleFlyPart then
         local bv = vehicleFlyPart:FindFirstChild("FlyVelocity")
         local bg = vehicleFlyPart:FindFirstChild("FlyGyro")
@@ -1022,18 +1301,18 @@ RunService.RenderStepped:Connect(function()
             local cam = workspace.CurrentCamera
             local vel = Vector3.new()
             local spd = vehicleFlySpeed * 80
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cam.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cam.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cam.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cam.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0,1,0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel = vel - Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel += cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel -= cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel -= cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel += cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel += Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel -= Vector3.new(0,1,0) end
             bv.Velocity = vel.Magnitude > 0 and vel.Unit * spd or Vector3.new()
             bg.CFrame = cam.CFrame
         end
     end
 
-    -- Player fly controls
+    -- Player fly
     if playerFlyOn and playerFlyPart then
         local bv = playerFlyPart:FindFirstChild("FlyVelocity")
         local bg = playerFlyPart:FindFirstChild("FlyGyro")
@@ -1041,14 +1320,72 @@ RunService.RenderStepped:Connect(function()
             local cam = workspace.CurrentCamera
             local vel = Vector3.new()
             local spd = playerFlySpeed * 80
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cam.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cam.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cam.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cam.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0,1,0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel = vel - Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel += cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel -= cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel -= cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel += cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel += Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel -= Vector3.new(0,1,0) end
             bv.Velocity = vel.Magnitude > 0 and vel.Unit * spd or Vector3.new()
             bg.CFrame = cam.CFrame
+        end
+    end
+
+    -- Player speed boost via welded part (no WalkSpeed change)
+    if playerSpeedOn and speedBoostPart then
+        local character = player.Character
+        if character then
+            local hum = character:FindFirstChildOfClass("Humanoid")
+            local bv = speedBoostPart:FindFirstChild("SpeedVelocity")
+            if hum and bv then
+                if hum.MoveDirection.Magnitude > 0 then
+                    local dir = Vector3.new(hum.MoveDirection.X, 0, hum.MoveDirection.Z).Unit
+                    bv.Velocity = dir * (hum.WalkSpeed * playerSpeedMult)
+                else
+                    bv.Velocity = Vector3.new(0, 0, 0)
+                end
+            end
+        end
+    end
+
+    -- ESP update
+    if espOn then
+        local myChar = player.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and p.Character then
+                local char = p.Character
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                local bb = hrp and hrp:FindFirstChild("TwistedESP_BB")
+                if bb and hrp and hum then
+                    -- Distance
+                    local dist = myHRP and math.floor((myHRP.Position - hrp.Position).Magnitude) or 0
+                    local distLbl = bb:FindFirstChild("DistLbl")
+                    if distLbl then distLbl.Text = dist .. " studs" end
+
+                    -- Health
+                    local hp = math.floor(hum.Health)
+                    local maxHp = math.floor(hum.MaxHealth)
+                    local hpLbl = bb:FindFirstChild("HpLbl")
+                    if hpLbl then
+                        hpLbl.Text = "HP: " .. hp .. "/" .. maxHp
+                        local pct = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+                        hpLbl.TextColor3 = Color3.fromRGB(
+                            math.floor(255 * (1 - pct)),
+                            math.floor(220 * pct),
+                            50
+                        )
+                    end
+
+                    -- Keep team color updated
+                    local teamCol = getTeamColor(p)
+                    local hl = char:FindFirstChild("TwistedESP_HL")
+                    if hl then hl.FillColor = teamCol hl.OutlineColor = teamCol end
+                    local nameLbl = bb:FindFirstChild("NameLbl")
+                    if nameLbl then nameLbl.TextColor3 = teamCol end
+                end
+            end
         end
     end
 end)
