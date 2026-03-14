@@ -19,5 +19,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/astroistuff/TwistedEn
 - Menu Themes
 - Infinite Yield
 - ESP
-- Twisted Remote Spy
-- Remove VFX (LAGGY!)
+- Remove Particles
