@@ -45,6 +45,12 @@ local antiPickup      = false
 local espOn           = false
 local playerSpeedOn   = false
 local removeParticles = false
+local freecamOn      = false
+local freecamPart    = nil
+local freecamSpeed   = 1.0
+local freecamYaw     = 0
+local freecamPitch   = 0
+local freecamSensitivity = 0.003
 local playerSpeedMult = 1.5
 local speedBoostPart  = nil
 local espHighlights   = {}
@@ -494,7 +500,7 @@ local extrasTab = Instance.new("ScrollingFrame")
 extrasTab.Size = UDim2.new(1, 0, 1, 0)
 extrasTab.BackgroundTransparency = 1
 extrasTab.Visible = false
-extrasTab.CanvasSize = UDim2.new(0, 0, 0, 340)
+extrasTab.CanvasSize = UDim2.new(0, 0, 0, 480)
 extrasTab.ScrollBarThickness = 3
 extrasTab.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 95)
 extrasTab.BorderSizePixel = 0
@@ -541,6 +547,47 @@ particleStroke.Thickness = 1
 particleStroke.Parent = particleBtn
 
 local particleHint = makeLabel(extrasTab, "Clears Workspace.Camera.ParticleEffects", 9, 14, 264, WINDOW_W - 28, 14,
+    themes[1].dim, Enum.Font.Gotham)
+
+makeDivider(extrasTab, 284)
+
+makeLabel(extrasTab, "FREECAM", 9, 14, 292, WINDOW_W - 28, 12, themes[1].dim, Enum.Font.GothamBold)
+
+local freecamBtn = makeBtn(extrasTab, "FREECAM: OFF", 308, 38, themes[1].sub, themes[1].text)
+local freecamStroke = Instance.new("UIStroke")
+freecamStroke.Color = themes[1].div
+freecamStroke.Thickness = 1
+freecamStroke.Parent = freecamBtn
+
+local freecamSpeedLabel = makeLabel(extrasTab, "CAM SPEED", 9, 14, 354, 110, 12, themes[1].dim, Enum.Font.GothamBold)
+local freecamSpeedVal   = makeLabel(extrasTab, "1x", 9, WINDOW_W - 42, 354, 28, 12, themes[1].dim, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+
+local freecamTrack = Instance.new("Frame")
+freecamTrack.Size = UDim2.new(1, -28, 0, 6)
+freecamTrack.Position = UDim2.new(0, 14, 0, 370)
+freecamTrack.BackgroundColor3 = themes[1].sub
+freecamTrack.BorderSizePixel = 0
+makeCorner(freecamTrack, 3)
+freecamTrack.Parent = extrasTab
+
+local freecamFill = Instance.new("Frame")
+freecamFill.Size = UDim2.new(0.1, 0, 1, 0)
+freecamFill.BackgroundColor3 = themes[1].accent
+freecamFill.BorderSizePixel = 0
+makeCorner(freecamFill, 3)
+freecamFill.Parent = freecamTrack
+
+local freecamKnob = Instance.new("TextButton")
+freecamKnob.Size = UDim2.new(0, 14, 0, 14)
+freecamKnob.Position = UDim2.new(0.1, -7, 0.5, -7)
+freecamKnob.BackgroundColor3 = themes[1].text
+freecamKnob.Text = ""
+freecamKnob.BorderSizePixel = 0
+freecamKnob.AutoButtonColor = false
+makeCorner(freecamKnob, 7)
+freecamKnob.Parent = freecamTrack
+
+local freecamHint = makeLabel(extrasTab, "WASD + Space/Ctrl to move, Q to exit", 9, 14, 384, WINDOW_W - 28, 14,
     themes[1].dim, Enum.Font.Gotham)
 
 -- ================================================
@@ -614,6 +661,15 @@ local function applyTheme(idx)
     particleBtn.TextColor3 = removeParticles and t.btnText or t.text
     particleStroke.Color = t.div
     particleHint.TextColor3 = t.dim
+    freecamBtn.BackgroundColor3 = freecamOn and t.accent or t.sub
+    freecamBtn.TextColor3 = freecamOn and t.btnText or t.text
+    freecamStroke.Color = t.div
+    freecamSpeedLabel.TextColor3 = t.dim
+    freecamSpeedVal.TextColor3 = t.dim
+    freecamTrack.BackgroundColor3 = t.sub
+    freecamFill.BackgroundColor3 = t.accent
+    freecamKnob.BackgroundColor3 = t.text
+    freecamHint.TextColor3 = t.dim
 
     for i2, data in ipairs(themeButtons) do
         data.stroke.Color = i2 == idx and t.accent or themes[i2].div
@@ -938,6 +994,11 @@ setupSlider(pSpeedTrack, pSpeedFill, pSpeedKnob, pSpeedSliderVal, 1, 50, 1.5, fu
     pSpeedSliderVal.Text = v .. "x"
 end)
 
+setupSlider(freecamTrack, freecamFill, freecamKnob, freecamSpeedVal, 0.5, 5, 1, function(v)
+    freecamSpeed = v
+    freecamSpeedVal.Text = v .. "x"
+end)
+
 -- ================================================
 -- PLAYER SPEED BOOST
 -- ================================================
@@ -1205,6 +1266,100 @@ local function getUISpeed()
 end
 
 -- ================================================
+-- FREECAM
+-- ================================================
+local function enableFreecam()
+    freecamOn = true
+    freecamBtn.Text = "FREECAM: ON"
+    freecamBtn.BackgroundColor3 = themes[currentTheme].accent
+    freecamBtn.TextColor3 = themes[currentTheme].btnText
+
+    local cam = workspace.CurrentCamera
+
+    -- Anchor part at current camera position
+    freecamPart = Instance.new("Part")
+    freecamPart.Name = "FreecamPart"
+    freecamPart.Size = Vector3.new(1, 1, 1)
+    freecamPart.Transparency = 1
+    freecamPart.CanCollide = false
+    freecamPart.Anchored = true
+    freecamPart.CFrame = cam.CFrame
+    freecamPart.Parent = workspace
+
+    -- Init yaw/pitch from current camera angle
+    local lookVector = cam.CFrame.LookVector
+    freecamYaw   = math.atan2(-lookVector.X, -lookVector.Z)
+    freecamPitch = math.asin(math.clamp(lookVector.Y, -1, 1))
+
+    -- Freeze character
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = 0
+            hum.JumpPower = 0
+        end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.Anchored = true end
+    end
+
+    -- Lock mouse
+    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+    UserInputService.MouseIconEnabled = false
+
+    cam.CameraType = Enum.CameraType.Scriptable
+end
+
+local function disableFreecam()
+    freecamOn = false
+    freecamBtn.Text = "FREECAM: OFF"
+    freecamBtn.BackgroundColor3 = themes[currentTheme].sub
+    freecamBtn.TextColor3 = themes[currentTheme].text
+
+    if freecamPart then
+        freecamPart:Destroy()
+        freecamPart = nil
+    end
+
+    -- Unfreeze character
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = 16
+            hum.JumpPower = 50
+        end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.Anchored = false end
+    end
+
+    -- Unlock mouse
+    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true
+
+    workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+end
+
+freecamBtn.MouseButton1Click:Connect(function()
+    if freecamOn then disableFreecam() else enableFreecam() end
+end)
+
+-- Q key to quickly exit freecam
+UserInputService.InputBegan:Connect(function(input, processed)
+    if input.KeyCode == Enum.KeyCode.Q and not processed and freecamOn then
+        disableFreecam()
+    end
+end)
+
+-- Mouse look
+UserInputService.InputChanged:Connect(function(input)
+    if freecamOn and input.UserInputType == Enum.UserInputType.MouseMovement then
+        freecamYaw   = freecamYaw   - input.Delta.X * freecamSensitivity
+        freecamPitch = math.clamp(freecamPitch - input.Delta.Y * freecamSensitivity, -math.pi/2 + 0.05, math.pi/2 - 0.05)
+    end
+end)
+
+-- ================================================
 -- REMOVE PARTICLES
 -- ================================================
 particleBtn.MouseButton1Click:Connect(function()
@@ -1329,6 +1484,34 @@ RunService.RenderStepped:Connect(function()
             bv.Velocity = vel.Magnitude > 0 and vel.Unit * spd or Vector3.new()
             bg.CFrame = cam.CFrame
         end
+    end
+
+    -- Freecam movement + mouse look
+    if freecamOn and freecamPart then
+        local cam = workspace.CurrentCamera
+        local spd = freecamSpeed * 40
+
+        -- Build camera CFrame from yaw + pitch
+        local camCFrame = CFrame.new(freecamPart.Position)
+            * CFrame.Angles(0, freecamYaw, 0)
+            * CFrame.Angles(freecamPitch, 0, 0)
+
+        -- Move relative to camera direction
+        local moveVel = Vector3.new()
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVel += camCFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVel -= camCFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVel -= camCFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVel += camCFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVel += Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveVel -= Vector3.new(0,1,0) end
+
+        if moveVel.Magnitude > 0 then
+            freecamPart.CFrame = freecamPart.CFrame + (moveVel.Unit * spd * (1/60))
+        end
+
+        cam.CFrame = CFrame.new(freecamPart.Position)
+            * CFrame.Angles(0, freecamYaw, 0)
+            * CFrame.Angles(freecamPitch, 0, 0)
     end
 
     -- Player speed boost via welded part (no WalkSpeed change)
