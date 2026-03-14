@@ -18,6 +18,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/astroistuff/TwistedEn
 - Vehicle Instant Stop
 - Menu Themes
 - Infinite Yield
+- Free Cam
 - ESP
 - Remove Particles
 
